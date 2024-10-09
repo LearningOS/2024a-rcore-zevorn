@@ -14,7 +14,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::config::MAX_APP_NUM;
+use crate::config::{MAX_APP_NUM, MAX_SYSCALL_NUM};
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
 use lazy_static::*;
@@ -54,6 +54,7 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            syscall_times: [0; MAX_SYSCALL_NUM],
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -66,7 +67,7 @@ lazy_static! {
                     tasks,
                     current_task: 0,
                 })
-            },
+            }
         }
     };
 }
@@ -135,6 +136,40 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    /// Update the syscall times
+    pub fn update_syscall_times(&self, syscall_id: usize) {
+        match syscall_id {
+            n if n < MAX_SYSCALL_NUM => {
+                let mut inner = self.inner.exclusive_access();
+                let current = inner.current_task;
+                let current_task_syscall_times: *mut u32 = &mut inner.tasks[current].syscall_times[n] as *mut u32;
+                unsafe {
+                    *current_task_syscall_times = (*current_task_syscall_times) + 1;
+                }
+                drop(inner);
+            },
+            _ => {
+                panic!("Invalid syscall ID: {}", syscall_id);
+            }
+        }
+    }
+
+    /// Get the syscall times
+    pub fn get_syscall_times(&self, syscall_id: usize) -> u32 {
+        match syscall_id {
+            n if n < MAX_SYSCALL_NUM => {
+                let mut inner = self.inner.exclusive_access();
+                let current = inner.current_task;
+                let current_task_syscall_times: *mut u32 = &mut inner.tasks[current].syscall_times[n] as *mut u32;
+                drop(inner);
+                return unsafe { *current_task_syscall_times };
+            },
+            _ => {
+                panic!("Invalid syscall ID: {}", syscall_id);
+            }
+        }
+    }
 }
 
 /// Run the first task in task list.
@@ -168,4 +203,14 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+
+/// Update the syscall times
+pub fn update_syscall_times(syscall_id: usize) {
+    TASK_MANAGER.update_syscall_times(syscall_id);
+}
+
+/// Get the syscall times
+pub fn get_syscall_times(syscall_id: usize) -> u32 {
+    TASK_MANAGER.get_syscall_times(syscall_id)
 }
