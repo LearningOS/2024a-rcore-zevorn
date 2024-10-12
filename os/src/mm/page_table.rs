@@ -151,7 +151,7 @@ impl PageTable {
 
 /// Translate&Copy a ptr[u8] array with LENGTH len to a mutable u8 Vec through page table
 pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
-    let page_table = PageTable::from_token(token);
+    let page_table: PageTable = PageTable::from_token(token);
     let mut start = ptr as usize;
     let end = start + len;
     let mut v = Vec::new();
@@ -170,4 +170,14 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
         start = end_va.into();
     }
     v
+}
+
+/// get physical address from virtual address
+pub fn get_phys_addr(token: usize, vaddr: usize) -> usize {
+    let page_table: PageTable = PageTable::from_token(token);
+    let vpn = VirtAddr::from(vaddr).floor();
+    let pte = page_table.translate(vpn).unwrap();
+    let ppn = pte.ppn();
+    let offset = VirtAddr::from(vaddr).page_offset();
+    (ppn.0 << 12) | offset
 }
