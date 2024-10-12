@@ -32,6 +32,9 @@ pub struct TaskControlBlock {
 
     /// The syscall times
     pub syscall_times: [u32; MAX_SYSCALL_NUM],
+
+    /// The task time, unit is ms
+    pub time_ms: usize,
 }
 
 impl TaskControlBlock {
@@ -68,6 +71,7 @@ impl TaskControlBlock {
             heap_bottom: user_sp,
             program_brk: user_sp,
             syscall_times: [0; MAX_SYSCALL_NUM],
+            time_ms: 0,
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();

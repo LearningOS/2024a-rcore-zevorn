@@ -22,7 +22,7 @@ use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
-
+use crate::timer::get_time_ms;
 pub use context::TaskContext;
 
 /// The task manager, where all the tasks are managed.
@@ -80,6 +80,7 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let next_task = &mut inner.tasks[0];
         next_task.task_status = TaskStatus::Running;
+        next_task.time_ms = get_time_ms();
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
         drop(inner);
         let mut _unused = TaskContext::zero_init();
@@ -140,7 +141,9 @@ impl TaskManager {
         if let Some(next) = self.find_next_task() {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
+            inner.tasks[current].time_ms = get_time_ms() - inner.tasks[current].time_ms;
             inner.tasks[next].task_status = TaskStatus::Running;
+            inner.tasks[next].time_ms = get_time_ms();
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
@@ -167,6 +170,14 @@ impl TaskManager {
         let current = inner.current_task;
         inner.tasks[current].syscall_times
     }
+    
+    /// Get the current task's time
+    pub fn get_task_time_ms(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].time_ms
+    }
+    
 }
 
 /// Run the first task in task list.
@@ -224,4 +235,9 @@ pub fn update_syscall_times(syscall_id: usize) {
 /// Get the syscall times
 pub fn get_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
     TASK_MANAGER.get_syscall_times()
+}
+
+/// Get the current task's time
+pub fn get_task_time_ms() -> usize {
+    TASK_MANAGER.get_task_time_ms()
 }
