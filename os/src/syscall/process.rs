@@ -3,7 +3,10 @@ use crate::{
     config::MAX_SYSCALL_NUM,
     task::{
         change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus,
+        current_user_token,
     },
+    timer::get_time_us,
+    mm::get_phys_addr,
 };
 
 #[repr(C)]
@@ -43,7 +46,15 @@ pub fn sys_yield() -> isize {
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
-    -1
+    let us: usize = get_time_us();
+    let ts = get_phys_addr(current_user_token(), _ts as usize) as *mut TimeVal;
+    unsafe {
+        *ts = TimeVal {
+            sec: us / 1_000_000,
+            usec: us % 1_000_000,
+        };
+    }
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
