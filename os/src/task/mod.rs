@@ -16,6 +16,7 @@ mod task;
 
 use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
@@ -70,6 +71,10 @@ lazy_static! {
         }
     };
 }
+
+const PROT_READ: usize = 1;
+const PROT_WRITE:usize = 2;
+const PROT_EXEC: usize = 4;
 
 impl TaskManager {
     /// Run the first task in task list.
@@ -177,6 +182,26 @@ impl TaskManager {
         let current = inner.current_task;
         inner.tasks[current].time_ms
     }
+
+    /// Insert a new frame area in current task
+    pub fn insert_framed_area(&self, start: VirtAddr, end: VirtAddr, prot: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+
+        let mut perm = MapPermission::empty();
+        perm.set(MapPermission::R, (prot & PROT_READ) != 0);
+        perm.set(MapPermission::W, (prot & PROT_WRITE) != 0);
+        perm.set(MapPermission::X, (prot & PROT_EXEC) != 0);
+        perm.set(MapPermission::U, true);
+        inner.tasks[current].memory_set.insert_framed_area(start, end, perm);
+    }
+    
+    /// Delete a frame area in current task
+    pub fn delete_framed_area(&self, start: VirtAddr, end: VirtAddr) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].memory_set.delete_framed_area(start, end);
+    }
     
 }
 
@@ -240,4 +265,14 @@ pub fn get_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
 /// Get the current task's time
 pub fn get_task_time_ms() -> usize {
     TASK_MANAGER.get_task_time_ms()
+}
+
+/// Insert a new frame area in current task
+pub fn insert_framed_area(start: VirtAddr, end: VirtAddr, prot: usize) {
+    TASK_MANAGER.insert_framed_area(start, end, prot);
+}
+
+/// Delete a frame area in current task
+pub fn delete_framed_area(start: VirtAddr, end: VirtAddr) {
+    TASK_MANAGER.delete_framed_area(start, end);
 }
