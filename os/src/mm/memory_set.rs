@@ -65,7 +65,7 @@ impl MemorySet {
     }
 
     /// Delete area with `start_va` and `end_va`
-    pub fn delete_framed_area(
+    pub fn remove_framed_area(
         &mut self,
         start_va: VirtAddr,
         end_va: VirtAddr
