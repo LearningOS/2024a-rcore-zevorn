@@ -1,5 +1,7 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
+use crate::task::current_user_token;
+
 use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -151,6 +153,19 @@ impl PageTable {
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.find_pte(vpn).map(|pte| *pte)
     }
+
+    /// get the page table entry from the virtual page number with current user token
+    pub fn trans_from_cur_token(vpn: VirtPageNum) -> Option<PageTableEntry> {
+
+        let frame = frame_alloc().unwrap();
+        let pte: PageTable = PageTable {
+            root_ppn: PhysPageNum::from(current_user_token() & ((1usize << 44) - 1)),
+            frames: vec![frame],
+        };
+    
+        pte.find_pte(vpn).map(|_pte| *_pte)
+    }
+
     /// get the token from the page table
     pub fn token(&self) -> usize {
         8usize << 60 | self.root_ppn.0
