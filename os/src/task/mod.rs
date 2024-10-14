@@ -16,15 +16,15 @@ mod task;
 
 use crate::config::{MAX_SYSCALL_NUM, PAGE_SIZE};
 use crate::loader::{get_app_data, get_num_app};
-use crate::mm::{MapPermission, VirtAddr, VirtPageNum, StepByOne, PageTable};
+use crate::mm::{MapPermission, PageTable, StepByOne, VirtAddr, VirtPageNum};
 use crate::sync::UPSafeCell;
+use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
+pub use context::TaskContext;
 use lazy_static::*;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
-use crate::timer::get_time_ms;
-pub use context::TaskContext;
 
 /// The task manager, where all the tasks are managed.
 ///
@@ -73,14 +73,14 @@ lazy_static! {
 }
 
 const PROT_READ: usize = 1;
-const PROT_WRITE:usize = 2;
+const PROT_WRITE: usize = 2;
 const PROT_EXEC: usize = 4;
 
 #[macro_export]
 /// loop for page_for_each
 macro_rules! page_for_each {
     ($len:expr, $page_size:expr, $body:block) => {
-        for _ in 0..((($len + ($page_size - 1)) / $page_size)) {
+        for _ in 0..(($len + ($page_size - 1)) / $page_size) {
             $body
         }
     };
@@ -185,7 +185,7 @@ impl TaskManager {
         let current = inner.current_task;
         inner.tasks[current].syscall_times
     }
-    
+
     /// Get the current task's time
     pub fn get_task_time_ms(&self) -> usize {
         let inner = self.inner.exclusive_access();
@@ -198,18 +198,18 @@ impl TaskManager {
         let start_va: VirtAddr = VirtAddr::from(start);
         let end_va: VirtAddr = VirtAddr::from(start + len);
         let mut vpn: VirtPageNum = start_va.floor();
-        page_for_each!( len, PAGE_SIZE, {
+        page_for_each!(len, PAGE_SIZE, {
             match PageTable::trans_from_cur_token(vpn) {
                 Some(pte) => {
                     if pte.is_valid() {
                         return -1;
                     }
                 }
-                None => {},
+                None => {}
             }
             vpn.step();
         });
-    
+
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
 
@@ -218,18 +218,20 @@ impl TaskManager {
         perm.set(MapPermission::W, (prot & PROT_WRITE) != 0);
         perm.set(MapPermission::X, (prot & PROT_EXEC) != 0);
         perm.set(MapPermission::U, true);
-        inner.tasks[current].memory_set.insert_framed_area(start_va, end_va, perm);
+        inner.tasks[current]
+            .memory_set
+            .insert_framed_area(start_va, end_va, perm);
 
         0
     }
-    
+
     /// Delete a frame area in current task
     pub fn remove_framed_area(&self, start: usize, len: usize) -> isize {
         let start_va: VirtAddr = VirtAddr::from(start);
         let end_va: VirtAddr = VirtAddr::from(start + len);
 
         let mut start_vpn = start_va.floor();
-        page_for_each! ( len, PAGE_SIZE, {
+        page_for_each!(len, PAGE_SIZE, {
             match PageTable::trans_from_cur_token(start_vpn) {
                 Some(pte) => {
                     if !pte.is_valid() {
@@ -240,14 +242,15 @@ impl TaskManager {
             }
             start_vpn.step();
         });
-        
+
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
-        inner.tasks[current].memory_set.remove_framed_area(start_va, end_va);
-        
+        inner.tasks[current]
+            .memory_set
+            .remove_framed_area(start_va, end_va);
+
         0
     }
-    
 }
 
 /// Run the first task in task list.
